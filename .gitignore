@@ -3,3 +3,5 @@ dist
 .env
 .DS_Store
 *.log
+# Original 66MB file — deploy uses public/audio/ocean-loop.mp3
+public/audio/ocean-sound.m4a

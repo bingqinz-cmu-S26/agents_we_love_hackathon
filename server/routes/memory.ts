@@ -9,6 +9,7 @@ import {
 } from '../services/hydradb.js';
 import type { SessionRecord } from '../../src/types.js';
 import { emotionCheckInFromLabel } from '../../src/lib/emotion.js';
+import { FRESH_START_STACK } from '../../src/lib/freshStart.js';
 
 export const memoryRouter = Router();
 
@@ -159,8 +160,12 @@ memoryRouter.post('/start-from-memory', async (req, res) => {
     );
 
     if (!stack || !session) {
+      const label = emotionLabel?.trim() || 'calm';
       res.json({
-        ok: false,
+        ok: true,
+        freshStart: true,
+        stack: FRESH_START_STACK,
+        preEmotion: emotionCheckInFromLabel(label),
         reason: 'no_memory',
         recalledSessions: recalledSessions.slice(0, 3),
         memoryInsights: insights.slice(0, 6).map((i) => ({ text: i.text })),

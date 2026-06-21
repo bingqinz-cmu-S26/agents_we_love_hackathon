@@ -42,17 +42,24 @@ function isTenantReady(status: {
   );
 }
 
+let tenantReadyCached = false;
+
 export async function ensureTenant(client: NonNullable<HydraClient>): Promise<void> {
+  if (tenantReadyCached) return;
+
   try {
     await client.tenants.create({ tenantId: TENANT_ID });
   } catch {
     // tenant may already exist
   }
 
-  for (let i = 0; i < 40; i++) {
+  for (let i = 0; i < 12; i++) {
     const status = await client.tenants.status({ tenantId: TENANT_ID });
-    if (isTenantReady(status)) return;
-    await new Promise((r) => setTimeout(r, 3000));
+    if (isTenantReady(status)) {
+      tenantReadyCached = true;
+      return;
+    }
+    await new Promise((r) => setTimeout(r, 2000));
   }
 }
 
@@ -416,10 +423,23 @@ export function resolveStackFromMemory(
   insights: MemoryInsight[],
   emotionLabel?: string,
 ): { stack?: CalmStack; session?: RecalledSession } {
-  if (!recalledSessions.length) return {};
+  const parsedFromInsights: RecalledSession[] = [];
+  for (const insight of insights) {
+    const parsed = parseSessionFromMemory(insight.text);
+    if (parsed) parsedFromInsights.push(parsed);
+  }
+
+  const allSessions = [...recalledSessions];
+  for (const s of parsedFromInsights) {
+    if (!allSessions.some((x) => x.date === s.date && x.preEmotion === s.preEmotion)) {
+      allSessions.push(s);
+    }
+  }
+
+  if (!allSessions.length) return {};
 
   const memoryContext = insights.map((i) => i.text).join('\n');
-  let candidates = [...recalledSessions];
+  let candidates = [...allSessions];
 
   if (emotionLabel) {
     const matched = candidates.filter(

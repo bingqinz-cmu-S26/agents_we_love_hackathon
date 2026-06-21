@@ -11,5 +11,7 @@ healthRouter.get('/', (_req, res) => {
     nebiusModel: getAgentModelLabel(),
     nebiusModelId: getAgentModel(),
     tenant: process.env.HYDRA_TENANT_ID ?? 'still_meditation_copilot',
+    demoUserId: process.env.DEMO_USER_ID ?? undefined,
+    demoDisplayName: process.env.DEMO_DISPLAY_NAME ?? undefined,
   });
 });

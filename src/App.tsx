@@ -14,8 +14,11 @@ import type {
 import { getUserId } from './types';
 import { apiChat, apiHealth, apiListMemories, apiOnboarding, apiRecallInsights, apiSaveSession, apiSeedJourney, apiStartFromMemory } from './lib/api';
 import { stackHintText } from './lib/stackHint';
+import { pickBeginStack } from './lib/beginMeditation';
+import { FRESH_START_MESSAGES, FRESH_START_STACK } from './lib/freshStart';
 import { emotionCheckInFromLabel } from './lib/emotion';
 import { unlockSessionAudio } from './lib/sessionAudio';
+import { applyDemoHydraProfile } from './lib/demoProfile';
 import { useVoiceAgent } from './hooks/useVoiceAgent';
 import {
   JASON_INSIGHTS,
@@ -34,12 +37,7 @@ import { MoodMeter } from './components/MoodMeter';
 
 type View = 'home' | 'session' | 'debrief';
 
-const DEFAULT_CALM_STACK: CalmStack = {
-  guide: '4-7-8',
-  music: 'soft_piano',
-  scent: 'lavender',
-  lighting: 'warm_glow',
-};
+const DEFAULT_CALM_STACK: CalmStack = FRESH_START_STACK;
 
 const DEMO_PRE_EMOTION: EmotionCheckIn = {
   label: 'anxious',
@@ -79,7 +77,14 @@ export default function App() {
   const [forgetMode, setForgetMode] = useState(false);
   const [showMoodPicker, setShowMoodPicker] = useState(false);
   const [selectedEmotion, setSelectedEmotion] = useState<EmotionCheckIn>();
-  const [health, setHealth] = useState<{ hydradb: boolean; nebius: boolean; nebiusModel?: string }>();
+  const [health, setHealth] = useState<{
+    hydradb: boolean;
+    nebius: boolean;
+    nebiusModel?: string;
+    demoUserId?: string;
+    demoDisplayName?: string;
+  }>();
+  const [booting, setBooting] = useState(true);
   const [loading, setLoading] = useState(false);
   const [showLogs, setShowLogs] = useState(false);
   const [lastRecalled, setLastRecalled] = useState<AgentResponse['recalledSessions']>();
@@ -103,7 +108,17 @@ export default function App() {
   const [memoryDumpLoading, setMemoryDumpLoading] = useState(false);
 
   useEffect(() => {
-    apiHealth().then(setHealth).catch(() => setHealth({ hydradb: false, nebius: false }));
+    apiHealth()
+      .then((h) => {
+        setHealth(h);
+        if (h.demoUserId) {
+          const next = applyDemoHydraProfile(h.demoUserId, h.demoDisplayName);
+          setProfile(next);
+          setDemoLoaded(true);
+        }
+      })
+      .catch(() => setHealth({ hydradb: false, nebius: false }))
+      .finally(() => setBooting(false));
   }, []);
 
   const refreshMemory = useCallback(async () => {
@@ -124,15 +139,26 @@ export default function App() {
         if (data.logs) setApiLogs((prev) => [...data.logs, ...prev].slice(0, 30));
         if (data.ok && data.stack) {
           setSuggestedStack(data.stack);
-          setStackHint(stackHintText(data.stack, true));
+          setStackHint(stackHintText(data.stack, !data.freshStart, Boolean(data.freshStart)));
           if (data.recalledSession) setLastRecalled([data.recalledSession]);
           if (data.preEmotion) setCurrentPreEmotion(data.preEmotion);
+          if (data.freshStart && timeline.length === 0) {
+            setHomeMessage(FRESH_START_MESSAGES.title);
+            setHomeSubtitle(FRESH_START_MESSAGES.subtitle);
+          }
+        } else {
+          setSuggestedStack(FRESH_START_STACK);
+          setStackHint(stackHintText(FRESH_START_STACK, false, true));
+          if (timeline.length === 0) {
+            setHomeMessage(FRESH_START_MESSAGES.title);
+            setHomeSubtitle(FRESH_START_MESSAGES.subtitle);
+          }
         }
       } catch {
         /* no memory yet */
       }
     },
-    [profile.userId, forgetMode],
+    [profile.userId, forgetMode, timeline.length],
   );
 
   useEffect(() => {
@@ -168,8 +194,11 @@ export default function App() {
   const startSession = useCallback(
     (stack: CalmStack, preEmotion?: EmotionCheckIn, recalledSession?: RecalledSession) => {
       unlockSessionAudio();
-      const emotion = preEmotion ?? currentPreEmotion ?? selectedEmotion;
-      if (!emotion) return;
+      const emotion =
+        preEmotion ??
+        currentPreEmotion ??
+        selectedEmotion ??
+        emotionCheckInFromLabel(recalledSession?.preEmotion ?? 'calm');
       setActiveSession({
         stack,
         preEmotion: emotion,
@@ -280,6 +309,17 @@ export default function App() {
     const emotionLabel =
       emotionOverride?.label ?? currentPreEmotion?.label ?? selectedEmotion?.label;
 
+    const resolveEmotion = (
+      recalled?: RecalledSession,
+      apiPre?: EmotionCheckIn,
+    ): EmotionCheckIn =>
+      emotionOverride ??
+      apiPre ??
+      currentPreEmotion ??
+      selectedEmotion ??
+      (recalled ? emotionCheckInFromLabel(recalled.preEmotion) : undefined) ??
+      emotionCheckInFromLabel(emotionLabel ?? 'calm');
+
     try {
       const data = await apiStartFromMemory(profile.userId, {
         forgetMode,
@@ -289,28 +329,46 @@ export default function App() {
       if (data.logs) setApiLogs((prev) => [...data.logs, ...prev].slice(0, 30));
       if (data.memoryInsights) setMemoryInsights(data.memoryInsights);
 
-      if (!data.ok || !data.stack) {
-        setHomeMessage('I need a little history first.');
-        setHomeSubtitle('Tap Load demo history — then Begin meditation pulls your calm stack from memory.');
+      if (data.ok && data.stack) {
+        setSuggestedStack(data.stack);
+        setStackHint(stackHintText(data.stack, Boolean(data.recalledSession), Boolean(data.freshStart)));
+        if (data.recalledSession) setLastRecalled([data.recalledSession]);
+        const emotion = resolveEmotion(data.recalledSession, data.preEmotion);
+        startSession(data.stack, emotion, data.recalledSession);
+        if (!data.freshStart) {
+          setHomeSubtitle('Take your time.');
+        }
         return;
       }
 
-      setSuggestedStack(data.stack);
-      setStackHint(stackHintText(data.stack, true));
-      if (data.recalledSession) setLastRecalled([data.recalledSession]);
+      const fallback = pickBeginStack(DEFAULT_CALM_STACK, suggestedStack, lastRecalled, timeline);
+      const recalled =
+        data.recalledSession ??
+        lastRecalled?.[0] ??
+        fallback.recalled ??
+        (data.recalledSessions?.[0] as RecalledSession | undefined);
 
-      const emotion =
-        data.preEmotion ?? emotionOverride ?? currentPreEmotion ?? selectedEmotion;
-      if (emotion) setCurrentPreEmotion(emotion);
+      setSuggestedStack(fallback.stack);
+      setStackHint(stackHintText(fallback.stack, Boolean(recalled)));
+      if (recalled) setLastRecalled([recalled]);
 
-      startSession(
-        data.stack,
-        emotion ?? emotionCheckInFromLabel(data.recalledSession?.preEmotion ?? 'calm'),
-        data.recalledSession,
-      );
+      startSession(fallback.stack, resolveEmotion(recalled), recalled);
+
+      if (data.reason === 'no_memory' && !recalled && timeline.length === 0) {
+        setHomeSubtitle('Using a gentle default stack — load demo history for memory-guided sessions.');
+      } else {
+        setHomeSubtitle('Take your time.');
+      }
     } catch (err) {
       console.error('Begin from memory failed:', err);
-      setHomeSubtitle('Could not reach memory — try Load demo history.');
+      const fallback = pickBeginStack(DEFAULT_CALM_STACK, suggestedStack, lastRecalled, timeline);
+      const recalled = lastRecalled?.[0] ?? fallback.recalled;
+      startSession(
+        fallback.stack,
+        resolveEmotion(recalled),
+        recalled,
+      );
+      setHomeSubtitle('Memory API unreachable — starting with your last known calm stack.');
     } finally {
       setBeginLoading(false);
     }
@@ -426,6 +484,14 @@ export default function App() {
       .catch(() => setMemoryDump(null))
       .finally(() => setMemoryDumpLoading(false));
   }, [showLogs, profile.userId]);
+
+  if (booting) {
+    return (
+      <div className="presence-page min-h-screen flex items-center justify-center text-white/40 text-sm font-light">
+        Presence…
+      </div>
+    );
+  }
 
   if (!profile.onboardingComplete) {
     return <Onboarding onComplete={handleOnboarding} health={health} />;
@@ -594,7 +660,10 @@ export default function App() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => void beginMeditation()}
+                    onClick={() => {
+                      unlockSessionAudio();
+                      void beginMeditation();
+                    }}
                     disabled={beginLoading}
                     className="flex-1 py-2 rounded-full bg-white text-black text-xs font-medium disabled:opacity-60"
                   >

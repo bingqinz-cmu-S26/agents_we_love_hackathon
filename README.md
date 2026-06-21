@@ -30,6 +30,23 @@ Open http://localhost:5173
 - Promo code for HydraDB credits: `HYDRA2026`
 - Submission portal code: `MEMORY2026`
 
+## Render deploy
+
+This repo is set up to run as a single Render web service.
+
+1. In Render, create a new Web Service from this GitHub repo.
+2. Use the generated settings from [render.yaml](render.yaml) or set them manually:
+	- Build command: `npm ci && npm run build`
+	- Start command: `npm start`
+3. Add environment variables in Render:
+	- `HYDRA_DB_API_KEY`
+	- `HYDRA_TENANT_ID` if you are not using the default tenant
+	- `NEBIUS_API_KEY`
+	- `NEBIUS_MODEL`
+4. Deploy and use the Render URL as the demo link.
+
+Render will assign `PORT` automatically.
+
 ## Demo script (for judges)
 
 1. **Onboard** — pick guide tone → profile saved to HydraDB

@@ -60,17 +60,25 @@ export async function apiStartFromMemory(
   userId: string,
   opts?: { forgetMode?: boolean; emotionLabel?: string },
 ) {
-  const res = await fetch(`${API}/memory/start-from-memory`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      userId,
-      forgetMode: opts?.forgetMode ?? false,
-      emotionLabel: opts?.emotionLabel,
-    }),
-  });
-  if (!res.ok) throw new Error('Start from memory failed');
-  return res.json();
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), 12000);
+
+  try {
+    const res = await fetch(`${API}/memory/start-from-memory`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId,
+        forgetMode: opts?.forgetMode ?? false,
+        emotionLabel: opts?.emotionLabel,
+      }),
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error('Start from memory failed');
+    return res.json();
+  } finally {
+    window.clearTimeout(timer);
+  }
 }
 
 export async function apiListMemories(userId: string) {

@@ -26,6 +26,6 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-app.listen(PORT, () => {
-  console.log(`Presence API running on http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Presence running on port ${PORT} (NODE_ENV=${process.env.NODE_ENV ?? 'development'})`);
 });

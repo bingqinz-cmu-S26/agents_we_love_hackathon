@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: presence-meditation
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HYDRA_TENANT_ID
+        value: still_meditation_copilot
+      - key: NEBIUS_MODEL
+        value: Qwen/Qwen3-235B-A22B-Instruct-2507
+      - key: HYDRA_DB_API_KEY
+        sync: false
+      - key: NEBIUS_API_KEY
+        sync: false
+      - key: DEMO_USER_ID
+        value: user_65d03571
+      - key: DEMO_DISPLAY_NAME
+        value: Ema

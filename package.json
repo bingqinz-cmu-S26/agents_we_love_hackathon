@@ -11,6 +11,9 @@
     "preview": "vite preview",
     "start": "NODE_ENV=production tsx server/index.ts"
   },
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
     "@hydradb/sdk": "^2.0.1",
     "cors": "^2.8.5",
@@ -19,6 +22,7 @@
     "openai": "^4.77.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "tsx": "^4.19.2",
     "uuid": "^11.0.5"
   },
   "devDependencies": {
@@ -32,7 +36,6 @@
     "concurrently": "^9.1.2",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
-    "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vite": "^6.0.5"
   }
